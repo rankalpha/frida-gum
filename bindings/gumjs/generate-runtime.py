@@ -14,9 +14,9 @@ RELAXED_DEPS = {
 }
 
 EXACT_DEPS = {
-    "frida-java-bridge": "6.3.2",
-    "frida-objc-bridge": "7.0.6",
-    "frida-swift-bridge": "2.0.8"
+    "frida-java-bridge": ("6.3.2", "https://github.com/frida/frida-java-bridge.git"),
+    "frida-objc-bridge": ("7.0.6", "https://github.com/frida/frida-objc-bridge.git"),
+    "frida-swift-bridge": ("2.0.8", "https://github.com/frida/frida-swift-bridge.git")
 }
 
 
@@ -52,10 +52,15 @@ def generate_runtime(output_dir, priv_dir, input_dir, gum_dir, capstone_incdir, 
                        capture_output=True,
                        cwd=priv_dir,
                        check=True)
-        subprocess.run([npm, "install", "-E"] + [f"{name}@{version_spec}" for name, version_spec in EXACT_DEPS.items()],
+        subprocess.run([npm, "install", "-E"] + [f"{url}" for name, (version_spec, url) in EXACT_DEPS.items()],
                        capture_output=True,
                        cwd=priv_dir,
                        check=True)
+        
+        #subprocess.run([npm, "install", "-E"] + [f"{name}@{version_spec}" for name, version_spec in EXACT_DEPS.items()],
+        #               capture_output=True,
+        #               cwd=priv_dir,
+        #               check=True)
 
     runtime_reldir = Path("runtime")
     runtime_srcdir = input_dir / runtime_reldir
