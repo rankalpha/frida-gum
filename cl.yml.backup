@@ -1,0 +1,261 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  GUM_OPTIONS: '--enable-gumpp --enable-gumjs --with-devkits=gum,gumjs --enable-tests'
+
+jobs:
+  gir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install \
+              gobject-introspection \
+              libdwarf-dev \
+              libelf-dev \
+              libgirepository1.0-dev \
+              libglib2.0-dev \
+              libjson-glib-dev \
+              libsoup-3.0-dev \
+              libsqlite3-dev \
+              libunwind-dev \
+              ninja-build
+      - name: Build
+        run: |
+          ./configure \
+              --enable-shared \
+              --without-prebuilds=toolchain,sdk \
+              --disable-tests
+          make
+      - name: Upload GObject introspection data
+        uses: actions/upload-artifact@v4
+        with:
+          name: gum-gir
+          path: |
+            build/gum/Gum-1.0.gir
+            build/gum/Gum-1.0.typelib
+
+  native:
+    strategy:
+      matrix:
+        include:
+          - { id: windows-x86_64, runner: '"windows-latest"'                    }
+          - { id: windows-x86,    runner: '"windows-latest"'                    }
+          - { id: macos-x86_64,   runner: '"macos-13"'                          }
+          - { id: macos-arm64,    runner: '"macos-latest"'                      }
+          - { id: linux-x86_64,   runner: '"ubuntu-latest"'                     }
+          - { id: linux-x86,      runner: '"ubuntu-latest"'                     }
+          - { id: freebsd-arm64,  runner: '["self-hosted", "freebsd", "arm64"]' }
+      fail-fast: false
+    runs-on: ${{ fromJSON(matrix.runner) }}
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install gcc-multilib
+        if: matrix.id == 'linux-x86'
+        run: |
+          sudo apt-get update
+          sudo apt-get install gcc-multilib lib32stdc++-11-dev
+      - name: Build
+        if: ${{ startsWith(matrix.id, 'windows-') }}
+        run: |
+          .\configure ${{ env.GUM_OPTIONS }}
+          .\make
+      - name: Build
+        if: ${{ !startsWith(matrix.id, 'windows-') && matrix.id != 'linux-x86' }}
+        run: |
+          ./configure ${{ env.GUM_OPTIONS }}
+          make
+      - name: Build
+        if: matrix.id == 'linux-x86'
+        run: |
+          CC="gcc -m32" CXX="g++ -m32" STRIP="strip" \
+              ./configure --build=linux-x86 --host=linux-x86 ${{ env.GUM_OPTIONS }}
+          make
+      - name: Upload Gum devkit
+        if: ${{ !startsWith(matrix.id, 'linux-') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gum-devkit-${{ matrix.id }}
+          path: build/gum/devkit/
+      - name: Upload GumJS devkit
+        if: ${{ !startsWith(matrix.id, 'linux-') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gumjs-devkit-${{ matrix.id }}
+          path: build/bindings/gumjs/devkit/
+      - name: Test
+        run: make test
+
+  cross:
+    strategy:
+      matrix:
+        include:
+          - { id: windows-x86_64-mingw, opts: '--host=x86_64-w64-mingw32 --without-prebuilds=sdk:host', pkg: g++-mingw-w64-x86-64        }
+          - { id: windows-x86-mingw,    opts: '--host=i686-w64-mingw32 --without-prebuilds=sdk:host',   pkg: g++-mingw-w64-i686          }
+          - { id: linux-mips,           opts: '--host=mips-linux-gnu',                                  pkg: g++-mips-linux-gnu          }
+          - { id: linux-mipsel,         opts: '--host=mipsel-linux-gnu',                                pkg: g++-mipsel-linux-gnu        }
+          - { id: linux-mips64,         opts: '--host=mips64-linux-gnuabi64',                           pkg: g++-mips64-linux-gnuabi64   }
+          - { id: linux-mips64el,       opts: '--host=mips64el-linux-gnuabi64',                         pkg: g++-mips64el-linux-gnuabi64 }
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install ${{ matrix.pkg }}
+      - name: Build
+        run: |
+          ./configure ${{ matrix.opts }} ${{ env.GUM_OPTIONS }}
+          make
+      - name: Upload Gum devkit
+        if: ${{ !startsWith(matrix.id, 'linux-') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gum-devkit-${{ matrix.id }}
+          path: build/gum/devkit/
+      - name: Upload GumJS devkit
+        if: ${{ !startsWith(matrix.id, 'linux-') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gumjs-devkit-${{ matrix.id }}
+          path: build/bindings/gumjs/devkit/
+
+  manylinux:
+    strategy:
+      matrix:
+        arch: [x86, x86_64, x86_64-musl, armhf, arm64, arm64-musl, mips, mipsel, mips64, mips64el]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    container: ghcr.io/frida/x-tools-linux-${{ matrix.arch }}:latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build
+        run: |
+          ./configure --host=$XTOOLS_HOST ${{ env.GUM_OPTIONS }}
+          make
+      - name: Upload Gum devkit
+        uses: actions/upload-artifact@v4
+        with:
+          name: gum-devkit-linux-${{ matrix.arch }}
+          path: build/gum/devkit/
+      - name: Upload GumJS devkit
+        uses: actions/upload-artifact@v4
+        with:
+          name: gumjs-devkit-linux-${{ matrix.arch }}
+          path: build/bindings/gumjs/devkit/
+      - name: Test
+        if: matrix.arch == 'x86' || matrix.arch == 'x86_64'
+        run: make test
+
+  mobile:
+    strategy:
+      matrix:
+        id:
+          - ios-arm64
+          - android-x86
+          - android-x86_64
+          - android-arm
+          - android-arm64
+      fail-fast: false
+    runs-on: ${{ startsWith(matrix.id, 'ios-') && 'macos-latest' || 'ubuntu-latest' }}
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build
+        run: |
+          ./configure --host=${{ matrix.id }} ${{ env.GUM_OPTIONS }}
+          make
+      - name: Upload Gum devkit
+        uses: actions/upload-artifact@v4
+        with:
+          name: gum-devkit-${{ matrix.id }}
+          path: build/gum/devkit/
+      - name: Upload GumJS devkit
+        uses: actions/upload-artifact@v4
+        with:
+          name: gumjs-devkit-${{ matrix.id }}
+          path: build/bindings/gumjs/devkit/
+      - name: Package tests
+        run: tar -C build/tests -czf /tmp/runner.tar.gz gum-tests data/
+      - name: Test on Corellium iOS device
+        if: matrix.id == 'ios-arm64'
+        continue-on-error: true
+        uses: frida/corellium-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          gateway: corellium.frida.re
+          device: ios-12.5.7-arm64
+          upload: /tmp/runner.tar.gz
+          run: |
+            cd /usr/local
+            rm -rf opt/frida
+            mkdir -p opt/frida
+            cd opt/frida
+            tar xf $ASSET_PATH
+            ./gum-tests
+      - name: Test on Corellium Android device
+        if: matrix.id == 'android-arm64'
+        continue-on-error: true
+        uses: frida/corellium-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          gateway: corellium.frida.re
+          device: android-8.1.0-arm64
+          upload: /tmp/runner.tar.gz
+          run: |
+            cd /data/local/tmp
+            tar xf $ASSET_PATH
+            ./gum-tests
+
+  qnx-armeabi:
+    runs-on: ubuntu-latest
+    container: ghcr.io/frida/qnx-tools:latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build
+        run: |
+          CFLAGS="--sysroot=$QNX_TARGET/armle-v7" \
+              ./configure --host=arm-unknown-nto-qnx6.5.0eabi ${{ env.GUM_OPTIONS }}
+          make
+      - name: Upload Gum devkit
+        uses: actions/upload-artifact@v4
+        with:
+          name: gum-devkit-qnx-armeabi
+          path: build/gum/devkit/
+      - name: Upload GumJS devkit
+        uses: actions/upload-artifact@v4
+        with:
+          name: gumjs-devkit-qnx-armeabi
+          path: build/bindings/gumjs/devkit/
+      - name: Test
+        run: |
+          tar -C build/tests -cf /tmp/runner.tar gum-tests data/
+          /opt/sabrelite/run.sh /tmp/runner.tar /opt/frida/gum-tests
