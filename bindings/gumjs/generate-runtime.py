@@ -14,7 +14,7 @@ RELAXED_DEPS = {
 }
 
 EXACT_DEPS = {
-    "frida-java-bridge": ("6.3.2", "https://github.com/frida/frida-java-bridge.git"),
+    "frida-java-bridge": ("6.3.2", "https://github.com/rankalpha/frida-java-bridge.git"),
     "frida-objc-bridge": ("7.0.6", "https://github.com/frida/frida-objc-bridge.git"),
     "frida-swift-bridge": ("2.0.8", "https://github.com/frida/frida-swift-bridge.git")
 }
