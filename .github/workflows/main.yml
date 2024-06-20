@@ -49,11 +49,6 @@ jobs:
             build/gum/Gum-1.0.gir
             build/gum/Gum-1.0.typelib
 
-
-
-
-
-
   mobile:
     strategy:
       matrix:
