@@ -58,7 +58,6 @@ jobs:
     strategy:
       matrix:
         id:
-          - android-arm
           - android-arm64
       fail-fast: false
     runs-on: ${{ startsWith(matrix.id, 'ios-') && 'macos-latest' || 'ubuntu-latest' }}
@@ -69,10 +68,6 @@ jobs:
           submodules: recursive
       - name: Build
         run: |
-          export FRIDA_OBJC_BRIDGE=disabled
-          export FRIDA_SWIFT_BRIDGE=disabled
-          export FRIDA_JAILBREAK=disabled
-          export FRIDA_V8=disabled
           ./configure --host=${{ matrix.id }} ${{ env.GUM_OPTIONS }}
           make
       - name: Upload Gum devkit
