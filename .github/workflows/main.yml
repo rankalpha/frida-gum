@@ -85,6 +85,5 @@ jobs:
         with:
           name: gumjs-devkit-${{ matrix.id }}
           path: build/bindings/gumjs/devkit/
-      - name: Package tests
-        run: tar -C build/tests -czf /tmp/runner.tar.gz gum-tests data/
+
 
