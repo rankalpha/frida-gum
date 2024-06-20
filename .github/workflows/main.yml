@@ -69,6 +69,10 @@ jobs:
           submodules: recursive
       - name: Build
         run: |
+          export FRIDA_OBJC_BRIDGE=disabled
+          export FRIDA_SWIFT_BRIDGE=disabled
+          export FRIDA_JAILBREAK=disabled
+          export FRIDA_V8=disabled
           ./configure --host=${{ matrix.id }} ${{ env.GUM_OPTIONS }}
           make
       - name: Upload Gum devkit
